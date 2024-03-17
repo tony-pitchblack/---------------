@@ -158,3 +158,35 @@ def isMahalanobisOutlier(data, threshold=0.1):
     assert np.all(res_equal)
 
     return(res_pvalues, square_of_mahalanobis_distances)
+
+def get_whites_regr(regression, k_most_corr=None, full=False):
+    if full and k_most_corr:
+        raise ValueError('either full or k_most_corr must be supplied')
+    result_OLS = regression.fit()
+    e = result_OLS.resid
+    X = pd.DataFrame(data=regression.exog, columns=regression.exog_names,
+                        index=e.index).iloc[:, 1:]
+    X_resid = X.join(pd.DataFrame({"e": result_OLS.resid}))
+    kendall_corr = X_resid.corr(method='kendall')
+    most_corr_idx = kendall_corr.iloc[:-1, [-1]].sort_values(by='e', ascending=False,
+                                            key=lambda series: series.abs()).index
+    
+    if full:
+        X_white = X.copy()
+        for i, colname_i in enumerate(X):
+            for colname_j in X.columns[i:]:
+                colname_ij = colname_i + ' * ' + colname_j 
+                X_white[colname_ij] = X[colname_i] * X[colname_j]
+    else:
+        X_white = X[most_corr_idx[:k_most_corr]] ** 2
+        X_white = X_white.rename(columns={col: col+'^2' for col in X_white.columns})
+    X_white = sm.add_constant(X_white)
+    whites_resid_regr = sm.OLS(e ** 2, X_white, hasconst=True)
+
+    sigma_squared = (whites_resid_regr).fit().predict()
+    O_inv = np.eye(sigma_squared.shape[0])
+    np.fill_diagonal(O_inv, sigma_squared)
+    whites_regr = sm.WLS(regression.endog, regression.exog,
+                            weigts = O_inv, hasconst=True)
+
+    return(whites_regr)
