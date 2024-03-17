@@ -13,12 +13,12 @@ def ols_ar1(model,rho,drop1=False):
     if drop1 == False:
         ystar = np.append(np.sqrt(1-rho**2)*y[0],ystar)
         xstar = np.append([np.sqrt(1-rho**2)*x[0,]],xstar,axis=0)
-    model_ar1 = sm.OLS(ystar,xstar).fit()
+    model_ar1 = sm.OLS(ystar,xstar)
     return(model_ar1)
 
 # cochrane-orcutt / prais-winsten iterative procedure
 # default to cochrane-orcutt (drop1=True)
-def OLSAR1(model,drop1=False):
+def OLSAR1(model, n_iter=np.inf, drop1=False):
     x = model.exog
     y = model.endog
     res = model.fit()
@@ -26,13 +26,15 @@ def OLSAR1(model,drop1=False):
     e1 = e[:-1]; e0 = e[1:]
     rho0 = np.dot(e1,e0)/np.dot(e1,e1)
     rdiff = 1.0
-    while(rdiff>1.0e-5):
+    i = 0
+    while(rdiff>1.0e-5 and i < n_iter):
         model1 = ols_ar1(model,rho0,drop1)
-        e = model1.resid
+        e = model1.fit().resid
         e1 = e[:-1]; e0 = e[1:]
         rho1 = np.dot(e1,e0)/np.dot(e1,e1)
         rdiff = np.sqrt((rho1-rho0)**2)
         rho0 = rho1
+        i += 1
         print('Rho = ', rho0)
     # pint final iteration
     # print(sm.OLS(e0,e1).fit().summary())
@@ -162,6 +164,7 @@ def isMahalanobisOutlier(data, threshold=0.1):
 def get_whites_regr(regression, k_most_corr=None, full=False):
     if full and k_most_corr:
         raise ValueError('either full or k_most_corr must be supplied')
+
     result_OLS = regression.fit()
     e = result_OLS.resid
     X = pd.DataFrame(data=regression.exog, columns=regression.exog_names,
@@ -181,12 +184,13 @@ def get_whites_regr(regression, k_most_corr=None, full=False):
         X_white = X[most_corr_idx[:k_most_corr]] ** 2
         X_white = X_white.rename(columns={col: col+'^2' for col in X_white.columns})
     X_white = sm.add_constant(X_white)
-    whites_resid_regr = sm.OLS(e ** 2, X_white, hasconst=True)
+    whites_resid_regr = sm.OLS(np.log(e ** 2), X_white, hasconst=True)
+    # w_res = whites_resid_regr.fit()
+    # print(w_res.summary())
 
-    sigma_squared = (whites_resid_regr).fit().predict()
-    O_inv = np.eye(sigma_squared.shape[0])
-    np.fill_diagonal(O_inv, sigma_squared)
+    sigma_sq_log = whites_resid_regr.fit().predict()
+    weights = 1/np.exp(sigma_sq_log)
     whites_regr = sm.WLS(regression.endog, regression.exog,
-                            weigts = O_inv, hasconst=True)
+                            weights=weights, hasconst=True)
 
-    return(whites_regr)
+    return(whites_regr, whites_resid_regr.exog_names)
