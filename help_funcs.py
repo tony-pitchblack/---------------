@@ -183,7 +183,7 @@ def get_whites_regr(regression, k_most_corr=None, full=False):
     else:
         X_white = X[most_corr_idx[:k_most_corr]] ** 2
         X_white = X_white.rename(columns={col: col+'^2' for col in X_white.columns})
-        X_white = X.merge(X_white, left_index=True, right_index=True)
+        # X_white = X.merge(X_white, left_index=True, right_index=True)
     X_white = sm.add_constant(X_white)
     whites_resid_regr = sm.OLS(np.log(e ** 2), X_white, hasconst=True)
     # w_res = whites_resid_regr.fit()
