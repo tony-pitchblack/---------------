@@ -3,6 +3,54 @@ import pandas as pd
 import statsmodels.api as sm
 from scipy.stats import chi2
 
+def _fit_ridge(
+            model, alpha,
+            cov_type = "nonrobust",
+            cov_kwds=None,
+            use_t = None,
+            **kwargs,
+            ):
+        """
+        Fit a linear model using ridge regression.
+
+        Parameters
+        ----------
+        alpha : scalar or array_like
+            The penalty weight.  If a scalar, the same penalty weight
+            applies to all variables in the model.  If a vector, it
+            must have the same length as `params`, and contains a
+            penalty weight for each coefficient.
+
+        Notes
+        -----
+        Equivalent to fit_regularized with L1_wt = 0 (but implemented
+        more efficiently).
+        """
+
+        model.fit()
+        u, s, vt = np.linalg.svd(model.exog, 0)
+        v = vt.T
+        q = np.dot(u.T, model.endog) * s
+        s2 = s * s
+        if np.isscalar(alpha):
+            sd = s2 + alpha * model.nobs
+            params = q / sd
+            params = np.dot(v, params)
+        else:
+            alpha = np.asarray(alpha)
+            vtav = model.nobs * np.dot(vt, alpha[:, None] * v)
+            d = np.diag(vtav) + s2
+            np.fill_diagonal(vtav, d)
+            r = np.linalg.solve(vtav, q)
+            params = np.dot(v, r)
+
+        lfit = sm.regression.linear_model.OLSResults(
+            model, params,
+            normalized_cov_params=model.normalized_cov_params,
+            cov_type=cov_type, cov_kwds=cov_kwds, use_t=use_t)
+        
+        return sm.regression.linear_model.RegressionResultsWrapper(lfit)
+
 # cochrane-orcutt / prais-winsten with given AR(1) rho, 
 # derived from ols model, default to cochrane-orcutt 
 def ols_ar1(model,rho,drop1=False):
