@@ -54,14 +54,18 @@ def _fit_ridge(
 # cochrane-orcutt / prais-winsten with given AR(1) rho, 
 # derived from ols model, default to cochrane-orcutt 
 def ols_ar1(model,rho,drop1=False):
-    x = model.exog
+    # implies X has const
+    x = model.exog[:, 1:]
     y = model.endog
     ystar = y[1:]-rho*y[:-1]
     xstar = x[1:,]-rho*x[:-1,]
     if drop1 == False:
         ystar = np.append(np.sqrt(1-rho**2)*y[0],ystar)
         xstar = np.append([np.sqrt(1-rho**2)*x[0,]],xstar,axis=0)
-    model_ar1 = sm.OLS(ystar,xstar)
+    xstar = sm.add_constant(xstar)
+    xstar = pd.DataFrame(xstar, columns=model.exog_names)
+    ystar = pd.DataFrame(ystar, columns=[model.endog_names])
+    model_ar1 = sm.OLS(ystar,xstar, hasconst=True)
     return(model_ar1)
 
 # cochrane-orcutt / prais-winsten iterative procedure
